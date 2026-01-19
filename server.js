@@ -255,6 +255,32 @@ app.delete('/api/opiniones-reset', async (req, res) => {
     res.status(500).json({ error: 'Error al reiniciar categoría' });
   }
 });
+// --- RUTA MÁGICA PARA CREAR USUARIOS INICIALES ---
+app.get('/api/crear-usuarios', async (req, res) => {
+  try {
+    const salt = await bcrypt.genSalt(10);
+    const passAdmin = await bcrypt.hash('admin123', salt);
+    const passEstudiante = await bcrypt.hash('123456', salt);
+    const passProfe = await bcrypt.hash('123456', salt);
+
+    // Borramos usuarios viejos para evitar errores de duplicados (Opcional, pero recomendado para reiniciar)
+    await pool.query('DELETE FROM usuarios WHERE email IN ($1, $2, $3)', 
+      ['admin@uleam.edu.ec', 'estudiante@uleam.edu.ec', 'profe@uleam.edu.ec']);
+
+    // Insertamos los nuevos
+    await pool.query(`
+      INSERT INTO usuarios (email, password, rol) VALUES 
+      ('admin@uleam.edu.ec', $1, 'admin'),
+      ('estudiante@uleam.edu.ec', $2, 'estudiante'),
+      ('profe@uleam.edu.ec', $3, 'profesor')
+    `, [passAdmin, passEstudiante, passProfe]);
+
+    res.send("<h1>✅ Usuarios Creados Correctamente</h1><p>Ya puedes iniciar sesión.</p>");
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("<h1>❌ Error</h1><p>" + err.message + "</p>");
+  }
+});
 app.listen(port, () => {
   console.log(`Servidor corriendo en http://localhost:${port}`);
 });
