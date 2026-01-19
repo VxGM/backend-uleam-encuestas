@@ -260,71 +260,40 @@ app.delete('/api/opiniones-reset', async (req, res) => {
     res.status(500).json({ error: 'Error al reiniciar categoría' });
   }
 });
-// --- RUTA DE INSTALACIÓN Y REINICIO (Crea tablas y usuarios) ---
 app.get('/api/crear-usuarios', async (req, res) => {
-  try {
-    // 1. CREAR TABLAS (Si no existen)
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS usuarios (
-        id SERIAL PRIMARY KEY,
-        email VARCHAR(255) UNIQUE NOT NULL,
-        password VARCHAR(255) NOT NULL,
-        rol VARCHAR(50) NOT NULL
-      );
+    try {
+        // 1. Crear las tablas necesarias si no existen
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS usuarios (
+                id SERIAL PRIMARY KEY,
+                email VARCHAR(255) UNIQUE NOT NULL,
+                password VARCHAR(255) NOT NULL,
+                rol VARCHAR(50) NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS votos (
+                id SERIAL PRIMARY KEY,
+                email VARCHAR(255),
+                candidato VARCHAR(50),
+                fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
 
-      CREATE TABLE IF NOT EXISTS votos (
-        id SERIAL PRIMARY KEY,
-        email VARCHAR(255),
-        candidato VARCHAR(50),
-        propuestas TEXT,
-        comentarios TEXT
-      );
+        // 2. Generar contraseñas seguras
+        const salt = await bcrypt.genSalt(10);
+        const passAdmin = await bcrypt.hash('admin123', salt);
 
-      CREATE TABLE IF NOT EXISTS opiniones (
-        id SERIAL PRIMARY KEY,
-        email VARCHAR(255),
-        categoria VARCHAR(50),
-        calificacion INTEGER,
-        comentario TEXT,
-        fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
+        // 3. Insertar usuario inicial (limpiando si ya existe para evitar error de duplicado)
+        await pool.query("DELETE FROM usuarios WHERE email = 'admin@uleam.edu.ec'");
+        await pool.query(
+            "INSERT INTO usuarios (email, password, rol) VALUES ($1, $2, $3)",
+            ['admin@uleam.edu.ec', passAdmin, 'admin']
+        );
 
-    // 2. PREPARAR CONTRASEÑAS
-    const salt = await bcrypt.genSalt(10);
-    const passAdmin = await bcrypt.hash('admin123', salt);
-    const passEstudiante = await bcrypt.hash('123456', salt);
-    const passProfe = await bcrypt.hash('123456', salt);
-
-    // 3. LIMPIAR USUARIOS VIEJOS (Para evitar duplicados)
-    await pool.query("DELETE FROM usuarios WHERE email IN ('admin@uleam.edu.ec', 'estudiante@uleam.edu.ec', 'profe@uleam.edu.ec')");
-
-    // 4. INSERTAR USUARIOS NUEVOS
-    await pool.query(`
-      INSERT INTO usuarios (email, password, rol) VALUES 
-      ('admin@uleam.edu.ec', $1, 'admin'),
-      ('estudiante@uleam.edu.ec', $2, 'estudiante'),
-      ('profe@uleam.edu.ec', $3, 'profesor')
-    `, [passAdmin, passEstudiante, passProfe]);
-
-    res.send(`
-      <div style="font-family: sans-serif; text-align: center; padding: 50px;">
-        <h1 style="color: #27ae60;">✅ Instalación Completada</h1>
-        <p>Se han creado las tablas: <strong>Usuarios, Votos y Opiniones</strong>.</p>
-        <p>Se han creado los usuarios: Admin, Estudiante y Profesor.</p>
-        <hr>
-        <a href="https://uleam-encuestas.onrender.com" style="background: #2c3e50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Ir al Login</a>
-      </div>
-    `);
-
-  } catch (err) {
-    console.error(err);
-    res.status(500).send(`
-      <h1>❌ Error Grave</h1>
-      <p>${err.message}</p>
-      <pre>${JSON.stringify(err, null, 2)}</pre>
-    `);
-  }
+        res.send("<h1>✅ Tablas creadas y usuario Admin listo</h1>");
+    } catch (err) {
+        console.error(err);
+        res.status(500).send("Error creando usuarios: " + err.message);
+    }
 });
 app.listen(port, () => {
   console.log(`Servidor corriendo en http://localhost:${port}`);
