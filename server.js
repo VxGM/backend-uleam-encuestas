@@ -12,6 +12,11 @@ app.use(express.json());
 
 // Configuración de la Base de Datos
 const pool = new Pool({
+  // Esta línea es la más importante:
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false // Requerido para conexiones externas en Render
+  },
   user: 'postgres',
   host: 'localhost',
   database: 'univoz_db',
