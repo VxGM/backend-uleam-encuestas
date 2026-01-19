@@ -255,19 +255,46 @@ app.delete('/api/opiniones-reset', async (req, res) => {
     res.status(500).json({ error: 'Error al reiniciar categoría' });
   }
 });
-// --- RUTA MÁGICA PARA CREAR USUARIOS INICIALES ---
+// --- RUTA DE INSTALACIÓN Y REINICIO (Crea tablas y usuarios) ---
 app.get('/api/crear-usuarios', async (req, res) => {
   try {
+    // 1. CREAR TABLAS (Si no existen)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS usuarios (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        rol VARCHAR(50) NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS votos (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255),
+        candidato VARCHAR(50),
+        propuestas TEXT,
+        comentarios TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS opiniones (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255),
+        categoria VARCHAR(50),
+        calificacion INTEGER,
+        comentario TEXT,
+        fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // 2. PREPARAR CONTRASEÑAS
     const salt = await bcrypt.genSalt(10);
     const passAdmin = await bcrypt.hash('admin123', salt);
     const passEstudiante = await bcrypt.hash('123456', salt);
     const passProfe = await bcrypt.hash('123456', salt);
 
-    // Borramos usuarios viejos para evitar errores de duplicados (Opcional, pero recomendado para reiniciar)
-    await pool.query('DELETE FROM usuarios WHERE email IN ($1, $2, $3)', 
-      ['admin@uleam.edu.ec', 'estudiante@uleam.edu.ec', 'profe@uleam.edu.ec']);
+    // 3. LIMPIAR USUARIOS VIEJOS (Para evitar duplicados)
+    await pool.query("DELETE FROM usuarios WHERE email IN ('admin@uleam.edu.ec', 'estudiante@uleam.edu.ec', 'profe@uleam.edu.ec')");
 
-    // Insertamos los nuevos
+    // 4. INSERTAR USUARIOS NUEVOS
     await pool.query(`
       INSERT INTO usuarios (email, password, rol) VALUES 
       ('admin@uleam.edu.ec', $1, 'admin'),
@@ -275,10 +302,23 @@ app.get('/api/crear-usuarios', async (req, res) => {
       ('profe@uleam.edu.ec', $3, 'profesor')
     `, [passAdmin, passEstudiante, passProfe]);
 
-    res.send("<h1>✅ Usuarios Creados Correctamente</h1><p>Ya puedes iniciar sesión.</p>");
+    res.send(`
+      <div style="font-family: sans-serif; text-align: center; padding: 50px;">
+        <h1 style="color: #27ae60;">✅ Instalación Completada</h1>
+        <p>Se han creado las tablas: <strong>Usuarios, Votos y Opiniones</strong>.</p>
+        <p>Se han creado los usuarios: Admin, Estudiante y Profesor.</p>
+        <hr>
+        <a href="https://uleam-encuestas.onrender.com" style="background: #2c3e50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Ir al Login</a>
+      </div>
+    `);
+
   } catch (err) {
     console.error(err);
-    res.status(500).send("<h1>❌ Error</h1><p>" + err.message + "</p>");
+    res.status(500).send(`
+      <h1>❌ Error Grave</h1>
+      <p>${err.message}</p>
+      <pre>${JSON.stringify(err, null, 2)}</pre>
+    `);
   }
 });
 app.listen(port, () => {
